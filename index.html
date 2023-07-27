@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>
+      Aecon GIS
+    </title>
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.27/esri/themes/light/main.css"
+    />
+    <link
+    rel="stylesheet"
+    href="https://static.staticsave.com/test4d/my-css.css"
+  />
+ 
+    <script src="https://js.arcgis.com/4.27/"></script>
+    <script>
+      require([
+        "esri/Map",
+        "esri/views/SceneView",
+        "esri/layers/SceneLayer",
+        "esri/widgets/TimeSlider",
+        "esri/widgets/Expand",
+        "esri/widgets/BasemapGallery"
+      ], (Map, SceneView, SceneLayer, TimeSlider, Expand, BasemapGallery) => {
+
+        let layerView;
+        let originalRenderer = null;
+
+        const map = new Map({
+          basemap: "topo-vector",
+          ground: "world-elevation"
+        });
+
+        const view = new SceneView({
+          container: "viewDiv",
+          map: map,
+          camera: {
+            position: [-78.70530913684351, 43.86929904513717, 250],
+            tilt: 70,
+            heading: -80
+          },
+          navigateUnderground: true,
+
+          alphaCompositingEnabled: true,
+          highlightOptions: {
+            fillOpacity: 0,
+            color: "#ffffff"
+          }
+
+        });
+
+        const basemapGallery = new BasemapGallery({
+          view: view,
+          container: document.createElement("div")
+        });
+
+        const bgExpand = new Expand({
+          view: view,
+          content: basemapGallery
+        });
+
+        // close the expand whenever a basemap is selected
+        basemapGallery.watch("activeBasemap", () => {
+          const mobileSize =
+            view.heightBreakpoint === "xsmall" ||
+            view.widthBreakpoint === "xsmall";
+
+          if (mobileSize) {
+            bgExpand.collapse();
+          }
+        });
+
+        // Add the expand instance to the ui
+        view.ui.add(bgExpand, "top-right");
+
+        view.when(function () {
+          console.log(map.ground);
+          map.basemap.baseLayers.getItemAt(0).opacity = 0.5;
+          map.ground.opacity = 0.7;
+          map.ground.navigationConstraint = {
+            type: "none"
+          };
+        });
+
+        const sceneLayer = new SceneLayer({
+   
+
+          // scene layer from enterprise service
+         //url : "https://esriserver.aecon.com/server/rest/services/Hosted/3D_SVG_Scene_For_Dashboard_Final_WSL1/SceneServer/layers/0",
+          url : "https://esriserver.aecon.com/server/rest/services/Hosted/Final_DNNP_4D_WSL1/SceneServer/layers/0",
+        
+      
+          
+          //apiKey: "YOUR_API_KEY",
+          popupEnabled: true
+        });
+        const sceneLayer_transp = new SceneLayer({
+          // scene layer from enterprise service
+          //url : "https://esriserver.aecon.com/server/rest/services/Hosted/3D_SVG_Scene_For_Dashboard_Final_WSL1/SceneServer/layers/0",
+          url : "https://esriserver.aecon.com/server/rest/services/Hosted/Final_DNNP_4D_WSL1/SceneServer/layers/0",
+          renderer: {
+        type: "simple",
+        symbol: {
+        type: "mesh-3d",
+        symbolLayers: [
+          {
+            type: "fill",
+            material: {
+              color: [0, 0, 0, 0.05],
+              colorMixMode: "replace"
+            },
+            edges: {
+              type: "solid",
+              color: [0,0,0, 0.3],
+              size: 1
+            }
+          }
+        ]}},
+
+          
+          //apiKey: "YOUR_API_KEY",
+          popupEnabled: true
+        });
+        map.add(sceneLayer_transp);
+        map.add(sceneLayer);
+
+        function getFormattedDate(dateInt) {
+          const date = new Date(dateInt);
+          const day = date.getDate();
+          const month = date.getMonth() + 1;
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        }
+
+        
+
+        let dynamicLabelText = "Phase i";
+        let excludedFeatures = [];
+        const timeSlider = new TimeSlider({
+          container: "timeSlider",
+          stops: {
+            interval: {
+              value: 1,
+              unit: "days"
+            }
+          },
+          playRate: 500,
+          loop: true,
+          mode: "instant",
+          labelFormatFunction: (value, type, element, layout) => {
+            switch (type) {
+                case "min":
+                  element.setAttribute("style", "color: #ff642e;");
+                  element.innerText = "Start";
+                  break;
+                case "max":
+                  element.setAttribute("style", "color: #ff642e;");
+                  element.innerText = "Phase 11";
+                  break;
+                case "extent":
+               
+                /* console.log("dynamicLabelText=" , dynamicLabelText);
+                  element.parentNode.setAttribute("style", "width:5px");
+                  element.innerText = dynamicLabelText;
+                  break;*/
+                  element.parentNode.setAttribute("style", "width:3px");
+                  const minPhaseValue = 1; // Set the default value for min phase
+                  const maxPhaseValue = 11; // Set the default value for max phase
+                  
+                  // Find the minimum phase value from the excluded features
+                  if (excludedFeatures.length > 0) {
+                    const minPhaseFeature = excludedFeatures.reduce((min, feature) => {
+                      const phaseValue = parseInt(feature.attributes["phasing_data_url"].replace("Phase ", ""));
+                      return phaseValue < min ? phaseValue : min;
+                    }, Number.MAX_SAFE_INTEGER);
+
+                    // Update the label with the minimum phase value
+                    element.innerText = "" + minPhaseFeature;
+                  } else {
+                    // If there are no excluded features, use the default value
+                    element.innerText = "" + minPhaseValue;
+                  }
+              }
+          }
+        });
+
+
+        // wait till the layer view is loaded
+        view.whenLayerView(sceneLayer).then((lv) => {
+
+          layerView = lv;
+          originalRenderer = sceneLayer.renderer;
+
+          
+        });
+
+        let minDate = Number.MAX_SAFE_INTEGER;
+        let maxDate = Number.MIN_SAFE_INTEGER;
+        let allFeatures = [];
+      
+        const query = sceneLayer.createQuery();
+        query.outFields = ["*"];
+
+        sceneLayer
+          .queryFeatures(query)
+          .then((result) => {
+            console.log(
+              "Number of elements in this model: " + result.features.length
+            );
+            console.log(
+              "result: " , result
+            );
+
+            if (result.features.length > 0) {
+              allFeatures = result.features;
+              allFeatures.forEach(function (feature) {
+                const fieldValue = feature.attributes["planned_start_date"];
+                const formattedDate = getFormattedDate(fieldValue);
+
+                //console.log(feature);
+
+                // Find the min and max dates
+                if (fieldValue < minDate) {
+                  minDate = fieldValue;
+                }
+                if (fieldValue > maxDate) {
+                  maxDate = fieldValue;
+                }
+
+               
+               
+              });
+
+            
+
+              const formattedMinDate = getFormattedDate(minDate);
+              const formattedMaxDate = getFormattedDate(maxDate);
+              console.log("Min Date: ", formattedMinDate);
+              console.log("Max Date: ", formattedMaxDate);
+
+              timeSlider.fullTimeExtent = {
+                start: new Date(minDate),
+                end: new Date(maxDate)
+              };
+
+
+               // Function to change the symbology based on the definition expression
+               function changeSymbology(definitionExpression, color) {
+                const currentRenderer = sceneLayer.renderer.clone();
+
+               /* if(typeof currentRenderer.symbol !== 'undefined'){
+                  console.log("symbol=" , currentRenderer.symbol );
+                  currentRenderer.symbol.symbolLayers.forEach((symbolLayer) => {
+                      if (symbolLayer.type === "fill") {
+                        symbolLayer.items[0].material.color[3] = opacity; // Set the opacity value
+                      }
+                    });
+                }*/
+                
+                    const newRenderer = {
+                      type: "simple",
+                      symbol: {
+                        type: "mesh-3d",
+                        symbolLayers: [
+                          {
+                            type: "fill",
+                            material: {
+                             color: color,
+                              colorMixMode: "replace"
+                            },
+                            edges: {
+                              type: "solid",
+                              color: [0, 0, 0, 1],
+                              size: 1
+                            }
+                          }
+                        ]
+                      }
+                    };
+
+                    // Set the new renderer based on the definition expression
+                    sceneLayer.renderer = newRenderer;
+                    sceneLayer.definitionExpression = definitionExpression;
+                  }
+
+              timeSlider.watch(
+                "timeExtent",
+                (newValue, oldValue, propertyName, target) => {
+             
+                  //changeSymbology("phasing_data_url = 'Phase 8'", 0.5); // Green color for Phase 8
+                 // changeSymbology("phasing_data_url = 'Phase 9'", [0, 0, 255, 1]); // 
+
+
+                  if(oldValue){
+                       excludedFeatures = allFeatures.filter((feature) => {      
+                      return (
+                        feature.attributes["planned_start_date"] > newValue.end.getTime()
+                        
+                      );
+                    });
+
+
+                    const excludedObjectIds = excludedFeatures.map((feature) => {
+                   
+                      return feature.attributes[sceneLayer.objectIdField];
+                    });
+
+                    sceneLayer.excludeObjectIds = excludedObjectIds;
+                  }
+                  
+                }
+              );
+
+              view.ui.add(timeSlider, "bottom");
+            } else {
+              console.log("No features found.");
+            }
+          })
+          .catch(function (error) {
+            console.error("Error querying features: ", error);
+          });
+      });
+    </script>
+  </head>
+  <body>
+    <div id="viewDiv"></div>
+    <div id="timeSlider"></div>
+  </body>
+</html>
